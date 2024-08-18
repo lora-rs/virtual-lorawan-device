@@ -1,7 +1,7 @@
-use log::{debug, error, info, warn};
+use log::{error, info, warn};
 use metrics::Metrics;
 use semtech_udp::client_runtime;
-use semtech_udp::client_runtime::{ClientRx, ClientTx, UdpRuntime};
+use semtech_udp::client_runtime::{ClientRx, ClientTx, DownlinkRequest, UdpRuntime};
 use std::{
     collections::HashMap,
     net::{IpAddr, SocketAddr},
@@ -11,14 +11,24 @@ use std::{
 use structopt::StructOpt;
 use tokio::{
     signal,
-    sync::mpsc,
     time::{sleep, Duration},
 };
 
 mod error;
 mod metrics;
 mod settings;
+
+#[cfg(feature = "async-radio")]
+mod async_virtual_device;
+#[cfg(feature = "async-radio")]
+use async_virtual_device::VirtualDevice;
+
+mod util;
+#[cfg(not(feature = "async-radio"))]
 mod virtual_device;
+
+#[cfg(not(feature = "async-radio"))]
+use virtual_device::VirtualDevice;
 
 pub use error::{Error, Result};
 pub use settings::{mac_string_into_buf, Credentials};
@@ -90,7 +100,7 @@ async fn main() -> Result<()> {
         if let Some((_udp_runtime, client_tx, _client_rx, senders)) =
             pf_map.get_mut(packet_forwarder)
         {
-            let (packet_sender, lorawan_app) = virtual_device::VirtualDevice::new(
+            let (packet_sender, virtual_device) = VirtualDevice::new(
                 label.clone(),
                 instant,
                 client_tx.clone(),
@@ -106,7 +116,7 @@ async fn main() -> Result<()> {
             senders.push(packet_sender);
 
             tokio::spawn(async move {
-                if let Err(e) = lorawan_app.run().await {
+                if let Err(e) = virtual_device.run().await {
                     error!("{} device threw error: {:?}", label, e)
                 }
             });
@@ -133,19 +143,9 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-async fn setup_packet_forwarders(
+async fn setup_packet_forwarders<S: DownlinkSender>(
     mut packet_forwarder: HashMap<String, settings::PacketForwarder>,
-) -> Result<
-    HashMap<
-        String,
-        (
-            UdpRuntime,
-            ClientTx,
-            ClientRx,
-            Vec<virtual_device::PacketSender>,
-        ),
-    >,
-> {
+) -> Result<HashMap<String, (UdpRuntime, ClientTx, ClientRx, Vec<S>)>> {
     // prune the default packet forwarder if we have more than one
     if packet_forwarder.len() != 1 && packet_forwarder.contains_key("default") {
         packet_forwarder.remove("default");
@@ -171,10 +171,10 @@ async fn setup_packet_forwarders(
     Ok(pf_map)
 }
 
-async fn packet_muxer(
+async fn packet_muxer<S: DownlinkSender>(
     instant: Instant,
     mut client_rx: ClientRx,
-    senders: Vec<virtual_device::PacketSender>,
+    senders: Vec<S>,
     trigger: triggered::Listener,
 ) -> Result {
     tokio::select!(
@@ -183,7 +183,7 @@ async fn packet_muxer(
             loop {
                 let msg = client_rx.recv().await.ok_or(Error::RxChannelSemtechUdpClientRuntimeClosed)?;
                 if let client_runtime::Event::DownlinkRequest(downlink) = msg {
-
+                    println!("Downlink request: {:?}", downlink);
                     if let Some(scheduled_time) = downlink.pull_resp.data.txpk.time.tmst() {
                         let time = instant.elapsed().as_micros() as u32;
                         if scheduled_time > time {
@@ -193,7 +193,11 @@ async fn packet_muxer(
                                 let sender = sender.clone();
                                 let downlink = downlink.clone();
                                 tokio::spawn(async move {
+                                    info!("Sending downlink in {} ms", delay/1_000);
+                                    #[cfg(not(feature = "async-radio"))]
                                     sleep(Duration::from_micros(delay as u64 + 50_000)).await;
+                                    #[cfg(feature = "async-radio")]
+                                    sleep(Duration::from_micros(delay as u64)).await;
                                     if let Err(e) = sender.send(downlink, delay as u64).await {
                                         error!("Error sending packet to virtual-lorawan-device instance: {e}");
                                     }
@@ -216,12 +220,31 @@ async fn packet_muxer(
                             downlink.nack(semtech_udp::tx_ack::Error::TooLate).await?;
                         }
                     } else {
+                        #[cfg(not(feature = "async-radio"))]
                         warn!(
                             "Unexpected! UDP packet to transmit radio packet immediately"
                         );
+                        #[cfg(feature = "async-radio")]
+                        {
+                            let send_downlink = Box::new(downlink.clone());
+                            for sender in &senders {
+                                if let Err(e) = sender.send(send_downlink.clone(), 0).await {
+                                    error ! ("Error sending packet to virtual-lorawan-device instance: {e}");
+                                }
+                            }
+                            downlink.ack().await?;
+                        }
                     }
                 }
             }
         } => resp
     )
+}
+
+trait DownlinkSender: Send + Sync + Clone + 'static {
+    fn send(
+        &self,
+        downlink: Box<DownlinkRequest>,
+        delayed_for: u64,
+    ) -> impl std::future::Future<Output = Result> + Send;
 }

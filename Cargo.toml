@@ -8,6 +8,7 @@ publish = false
 [dependencies]
 anyhow = "1"
 bytes = "1"
+chrono = "0"
 config = { version="0.14", default-features = false, features = ["toml"] }
 env_logger = "0"
 futures-util = "0"
@@ -17,9 +18,11 @@ http-body-util = "0"
 hyper = { version = "1", features = ["full"] }
 hyper-util = {  version = "0", features = ["tokio"] }
 log = "0"
-lorawan-device = { git = "https://github.com/lora-rs/lora-rs.git", features = ["default-crypto", "defmt", "serde"]  }
+lorawan-device = { git = "https://github.com/lora-rs/lora-rs.git", features = ["default-crypto", "serde"]  }
+#lorawan-device = { path = "../lora-rs/lorawan-device", features = ["default-crypto", "serde", "multicast"]  }
 prometheus = "0"
-semtech-udp = { version = "0.11", features = ["client"] }
+rand_core = { version = "0.6", default-features = false, optional = true }
+semtech-udp = { path = "../semtech-udp", features = ["client"] }#{ version = "0.11" }
 serde = "1"
 structopt = "0"
 thiserror = "1"
@@ -29,3 +32,6 @@ triggered = "0"
 [dependencies.tokio]
 version = "1"
 features = ["macros", "sync", "time", "rt-multi-thread", "signal"]
+
+[features]
+async-radio = ["rand_core"]

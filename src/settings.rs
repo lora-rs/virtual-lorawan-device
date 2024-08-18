@@ -71,6 +71,21 @@ pub enum Region {
     US915,
 }
 
+impl From<Region> for lorawan_device::region::Region {
+    fn from(region: Region) -> lorawan_device::region::Region {
+        match region {
+            Region::AS923_1 => lorawan_device::region::Region::AS923_1,
+            Region::AS923_2 => lorawan_device::region::Region::AS923_2,
+            Region::AS923_3 => lorawan_device::region::Region::AS923_3,
+            Region::AS923_4 => lorawan_device::region::Region::AS923_4,
+            Region::AU915 => lorawan_device::region::Region::AU915,
+            Region::EU433 => lorawan_device::region::Region::EU433,
+            Region::EU868 => lorawan_device::region::Region::EU868,
+            Region::US915 => lorawan_device::region::Region::US915,
+        }
+    }
+}
+
 fn default_secs_between_transmits() -> u64 {
     5
 }

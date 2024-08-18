@@ -1,5 +1,4 @@
-use super::*;
-
+use log::{debug, info, warn};
 use lorawan_device::default_crypto::DefaultFactory as LorawanCrypto;
 use lorawan_device::mac::NetworkCredentials;
 use lorawan_device::region::Configuration;
@@ -9,8 +8,11 @@ use lorawan_device::{
 };
 use semtech_udp::client_runtime::DownlinkRequest;
 use std::str::FromStr;
+use std::time::Instant;
 use tokio::time::{sleep, Duration};
 use udp_radio::UdpRadio;
+
+use crate::{metrics, settings, ClientTx, Credentials, DownlinkSender, Error, Result};
 
 pub(crate) use udp_radio::{mpsc, IntermediateEvent};
 mod udp_radio;
@@ -32,12 +34,12 @@ pub struct PacketSender {
     sender: mpsc::Sender<IntermediateEvent>,
 }
 
-impl PacketSender {
-    pub async fn send(&self, downlink: Box<DownlinkRequest>, delayed_for: u64) -> Result {
+impl DownlinkSender for PacketSender {
+    async fn send(&self, downlink: Box<DownlinkRequest>, delayed_for: u64) -> Result {
         self.sender
             .send(IntermediateEvent::RadioEvent(downlink, delayed_for))
             .await
-            .map_err(Error::SendingDownlinkToUdpRadio)
+            .map_err(|_| Error::SendingDownlinkToUdpRadio)
     }
 }
 
@@ -55,20 +57,8 @@ impl VirtualDevice {
         region: settings::Region,
     ) -> Result<(PacketSender, VirtualDevice)> {
         let (radio, receiver, sender) = UdpRadio::new(time, client_tx).await;
-
-        let region = match region {
-            settings::Region::AU915 => lorawan_device::Region::AU915,
-            settings::Region::AS923_1 => lorawan_device::Region::AS923_1,
-            settings::Region::AS923_2 => lorawan_device::Region::AS923_2,
-            settings::Region::AS923_3 => lorawan_device::Region::AS923_3,
-            settings::Region::AS923_4 => lorawan_device::Region::AS923_4,
-            settings::Region::EU433 => lorawan_device::Region::EU433,
-            settings::Region::EU868 => lorawan_device::Region::EU868,
-            settings::Region::US915 => lorawan_device::Region::US915,
-        };
-
         let device: Device<UdpRadio, LorawanCrypto, rand::rngs::OsRng, 512> =
-            Device::new(Configuration::new(region), radio, rand::rngs::OsRng);
+            Device::new(Configuration::new(region.into()), radio, rand::rngs::OsRng);
 
         Ok((
             PacketSender {
@@ -106,6 +96,14 @@ impl VirtualDevice {
         let mut time_remaining = None;
         let mut lorawan = self.device;
         let mut metrics_sender = self.metrics_sender;
+
+        async fn send(
+            sender: &mpsc::Sender<IntermediateEvent>,
+            event: IntermediateEvent,
+        ) -> Result {
+            sender.send(event).await.map_err(|_| Error::UdpRadioClosed)
+        }
+
         loop {
             let event = self
                 .receiver
@@ -215,7 +213,7 @@ impl VirtualDevice {
                             )
                         }
                         LorawanResponse::SessionExpired => {
-                            self.sender.send(IntermediateEvent::NewSession).await?;
+                            send(&self.sender, IntermediateEvent::NewSession).await?;
                             debug!("{:8} SessionExpired. Created new Session", self.label)
                         }
                         LorawanResponse::NoUpdate => {
@@ -236,7 +234,7 @@ impl VirtualDevice {
             if send_uplink {
                 if let Some(fcnt_up) = lorawan.get_fcnt_up() {
                     if fcnt_up > self.rejoin_frames {
-                        self.sender.send(IntermediateEvent::NewSession).await?;
+                        send(&self.sender, IntermediateEvent::NewSession).await?;
                     } else {
                         let mut fport = rand::random();
                         while fport == 0 {

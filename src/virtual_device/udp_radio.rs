@@ -1,11 +1,10 @@
+use crate::util::{tx_request_to_rxpk, Settings};
 use log::info;
 use lorawan_device::{nb_device::radio, Timings};
 use semtech_udp::client_runtime::{ClientTx, DownlinkRequest};
-use semtech_udp::{Bandwidth, CodingRate, DataRate, SpreadingFactor};
 use std::time::{Duration, Instant};
 pub use tokio::sync::mpsc;
 use tokio::time::sleep;
-
 #[derive(Debug)]
 // I need some intermediate event because of Lifetimes
 // maybe there's a cleaner way of doing this
@@ -103,34 +102,16 @@ impl radio::PhyRxTx for UdpRadio {
     }
 
     fn handle_event(&mut self, event: LoraEvent<Self>) -> Result<LoraResponse<Self>, Error> {
-        use semtech_udp::push_data::*;
         match event {
             radio::Event::TxRequest(tx_config, buffer) => {
-                let size = buffer.len() as u64;
                 let tmst = self.time.elapsed().as_micros() as u32;
-                let settings = Settings::from(tx_config);
-                let mut data = Vec::new();
-                let datr = settings.get_datr();
-                let freq = settings.get_freq();
-                info!("Transmit @ {tmst} on {freq} Hz {datr:?}");
-                data.extend_from_slice(buffer);
-                let rxpk = RxPkV1 {
-                    chan: 0,
-                    codr: settings.get_codr(),
-                    data,
-                    datr,
-                    freq,
-                    lsnr: 5.5,
-                    modu: semtech_udp::Modulation::LORA,
-                    rfch: 0,
-                    rssi: -112,
-                    rssis: None,
-                    size,
-                    stat: CRC::OK,
-                    tmst,
-                    time: None,
-                };
-                let packet = Packet::from_rxpk([0, 0, 0, 0, 0, 0, 0, 0].into(), RxPk::V1(rxpk));
+                let settings = Settings::from(tx_config.rf);
+                info!(
+                    "Transmit @ {tmst} on {} Hz {:?}",
+                    settings.get_freq(),
+                    settings.get_datr()
+                );
+                let packet = tx_request_to_rxpk(settings, &buffer, tmst);
                 let sender = self.client_tx.clone();
                 tokio::spawn(async move {
                     if let Err(e) = sender.send(packet).await {
@@ -145,7 +126,7 @@ impl radio::PhyRxTx for UdpRadio {
                 ))
             }
             radio::Event::RxRequest(config) => {
-                self.settings.rfconfig = config;
+                self.settings = Settings::from(config);
                 Ok(radio::Response::Idle)
             }
             radio::Event::CancelRx => Ok(radio::Response::Idle),
@@ -172,68 +153,3 @@ impl Timings for UdpRadio {
 
 #[derive(Debug)]
 pub enum Error {}
-
-#[derive(Debug)]
-struct Settings {
-    rfconfig: radio::RfConfig,
-}
-
-impl Default for Settings {
-    fn default() -> Settings {
-        Settings {
-            rfconfig: radio::RfConfig {
-                frequency: 903000000,
-
-                bb: radio::BaseBandModulationParams::new(
-                    radio::SpreadingFactor::_7,
-                    radio::Bandwidth::_125KHz,
-                    radio::CodingRate::_4_5,
-                ),
-            },
-        }
-    }
-}
-
-impl From<radio::TxConfig> for Settings {
-    fn from(txconfig: radio::TxConfig) -> Settings {
-        Settings {
-            rfconfig: txconfig.rf,
-        }
-    }
-}
-
-impl Settings {
-    fn get_datr(&self) -> DataRate {
-        DataRate::new(
-            match self.rfconfig.bb.sf {
-                radio::SpreadingFactor::_5 => SpreadingFactor::SF5,
-                radio::SpreadingFactor::_6 => SpreadingFactor::SF6,
-                radio::SpreadingFactor::_7 => SpreadingFactor::SF7,
-                radio::SpreadingFactor::_8 => SpreadingFactor::SF8,
-                radio::SpreadingFactor::_9 => SpreadingFactor::SF9,
-                radio::SpreadingFactor::_10 => SpreadingFactor::SF10,
-                radio::SpreadingFactor::_11 => SpreadingFactor::SF11,
-                radio::SpreadingFactor::_12 => SpreadingFactor::SF12,
-            },
-            match self.rfconfig.bb.bw {
-                radio::Bandwidth::_125KHz => Bandwidth::BW125,
-                radio::Bandwidth::_250KHz => Bandwidth::BW250,
-                radio::Bandwidth::_500KHz => Bandwidth::BW500,
-                _ => panic!("unexpected lorawan bandwidth"),
-            },
-        )
-    }
-
-    fn get_codr(&self) -> CodingRate {
-        match self.rfconfig.bb.cr {
-            radio::CodingRate::_4_5 => CodingRate::_4_5,
-            radio::CodingRate::_4_6 => CodingRate::_4_6,
-            radio::CodingRate::_4_7 => CodingRate::_4_7,
-            radio::CodingRate::_4_8 => CodingRate::_4_8,
-        }
-    }
-
-    fn get_freq(&self) -> f64 {
-        self.rfconfig.frequency as f64 / 1_000_000.0
-    }
-}
