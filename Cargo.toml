@@ -18,8 +18,8 @@ http-body-util = "0"
 hyper = { version = "1", features = ["full"] }
 hyper-util = {  version = "0", features = ["tokio"] }
 log = "0"
-#lorawan-device = { git = "https://github.com/lora-rs/lora-rs.git", features = ["default-crypto", "serde"]  }
-lorawan-device = { path = "../lora-rs/lorawan-device", features = ["default-crypto", "serde", "multicast"]  }
+lorawan-device = { git = "https://github.com/lora-rs/lora-rs.git", features = ["default-crypto", "serde"]  }
+#lorawan-device = { path = "../lora-rs/lorawan-device", features = ["default-crypto", "serde", "multicast"]  }
 prometheus = "0"
 rand_core = { version = "0.6", default-features = false, optional = true }
 semtech-udp = { path = "../semtech-udp", features = ["client"] }#{ version = "0.11" }
