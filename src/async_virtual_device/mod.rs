@@ -62,6 +62,9 @@ impl VirtualDevice {
             rand_core::OsRng,
         );
         device.enable_class_c();
+        device.set_multicast_ke_key(lorawan_device::async_device::McRootKey::from_str(
+            "3371C1F28C755A5D328DFDD6E01A32ED",
+        )?);
         Ok((
             DS(sender),
             Self {
