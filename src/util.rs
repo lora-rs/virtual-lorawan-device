@@ -71,7 +71,7 @@ impl From<radio::RfConfig> for Settings {
 
 impl Settings {
     pub fn get_datr(&self) -> DataRate {
-        DataRate::new(self.rf_config.bb.sf.into(), self.rf_config.bb.bw.into())
+        DataRate::new(self.rf_config.bb.sf, self.rf_config.bb.bw)
     }
 
     pub fn get_codr(&self) -> CodingRate {

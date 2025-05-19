@@ -1,5 +1,4 @@
 use log::{debug, info, warn};
-use lorawan_device::default_crypto::DefaultFactory as LorawanCrypto;
 use lorawan_device::mac::NetworkCredentials;
 use lorawan_device::region::Configuration;
 use lorawan_device::{
@@ -19,7 +18,7 @@ mod udp_radio;
 
 pub struct VirtualDevice {
     label: String,
-    device: Device<UdpRadio, LorawanCrypto, rand::rngs::OsRng, 512>,
+    device: Device<UdpRadio, rand::rngs::OsRng, 512>,
     receiver: mpsc::Receiver<IntermediateEvent>,
     sender: mpsc::Sender<IntermediateEvent>,
     metrics_sender: metrics::Sender,
@@ -57,7 +56,7 @@ impl VirtualDevice {
         region: settings::Region,
     ) -> Result<(PacketSender, VirtualDevice)> {
         let (radio, receiver, sender) = UdpRadio::new(time, client_tx).await;
-        let device: Device<UdpRadio, LorawanCrypto, rand::rngs::OsRng, 512> =
+        let device: Device<UdpRadio, rand::rngs::OsRng, 512> =
             Device::new(Configuration::new(region.into()), radio, rand::rngs::OsRng);
 
         Ok((
