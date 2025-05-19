@@ -747,16 +747,12 @@ checksum = "a7a70ba024b9dc04c27ea2f0c0548feb474ec5c54bba33a7f72f873a39d07b24"
 [[package]]
 name = "lora-modulation"
 version = "0.1.5"
-
-[[package]]
-name = "lora-modulation"
-version = "0.1.5"
-source = "git+https://github.com/lora-rs/lora-rs.git#ee75a0c7110869051141aa1e53125c1ab775f44e"
+source = "git+https://github.com/lora-rs/lora-rs.git?rev=a5e690a3f1f68c4e4c43efcd564467938c574ea3#a5e690a3f1f68c4e4c43efcd564467938c574ea3"
 
 [[package]]
 name = "lorawan"
 version = "0.9.1"
-source = "git+https://github.com/lora-rs/lora-rs.git#ee75a0c7110869051141aa1e53125c1ab775f44e"
+source = "git+https://github.com/lora-rs/lora-rs.git?rev=a5e690a3f1f68c4e4c43efcd564467938c574ea3#a5e690a3f1f68c4e4c43efcd564467938c574ea3"
 dependencies = [
  "aes",
  "cmac",
@@ -768,23 +764,22 @@ dependencies = [
 [[package]]
 name = "lorawan-device"
 version = "0.12.2"
-source = "git+https://github.com/lora-rs/lora-rs.git#ee75a0c7110869051141aa1e53125c1ab775f44e"
+source = "git+https://github.com/lora-rs/lora-rs.git?rev=a5e690a3f1f68c4e4c43efcd564467938c574ea3#a5e690a3f1f68c4e4c43efcd564467938c574ea3"
 dependencies = [
  "document-features",
  "fastrand",
  "futures",
  "heapless",
- "lora-modulation 0.1.5 (git+https://github.com/lora-rs/lora-rs.git)",
+ "lora-modulation",
  "lorawan",
  "rand_core",
- "seq-macro",
  "serde",
 ]
 
 [[package]]
 name = "lorawan-macros"
 version = "0.1.0"
-source = "git+https://github.com/lora-rs/lora-rs.git#ee75a0c7110869051141aa1e53125c1ab775f44e"
+source = "git+https://github.com/lora-rs/lora-rs.git?rev=a5e690a3f1f68c4e4c43efcd564467938c574ea3#a5e690a3f1f68c4e4c43efcd564467938c574ea3"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1096,10 +1091,12 @@ checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
 [[package]]
 name = "semtech-udp"
 version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1e188b7049d90ac633978c9cab2d56b165e34e0922908f8cadbc7cbcff6e3370"
 dependencies = [
  "arrayref",
  "base64",
- "lora-modulation 0.1.5",
+ "lora-modulation",
  "macaddr",
  "num_enum",
  "rand",
@@ -1110,12 +1107,6 @@ dependencies = [
  "tokio",
  "triggered",
 ]
-
-[[package]]
-name = "seq-macro"
-version = "0.3.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a3f0bf26fd526d2a95683cd0f87bf103b8539e2ca1ef48ce002d67aad59aa0b4"
 
 [[package]]
 name = "serde"

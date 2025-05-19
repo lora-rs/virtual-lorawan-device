@@ -18,20 +18,24 @@ http-body-util = "0"
 hyper = { version = "1", features = ["full"] }
 hyper-util = {  version = "0", features = ["tokio"] }
 log = "0"
-lorawan-device = { git = "https://github.com/lora-rs/lora-rs.git", features = ["default-crypto", "serde"]  }
-#lorawan-device = { path = "../lora-rs/lorawan-device", features = ["default-crypto", "serde", "multicast"]  }
+lorawan-device = { version = ">=0.12.2", features = ["serde"] }
 prometheus = "0"
 rand_core = { version = "0.6", default-features = false, optional = true }
-semtech-udp = { path = "../semtech-udp", features = ["client"] }#{ version = "0.11" }
+semtech-udp = { version="0.12", features = ["client"] }
 serde = "1"
 structopt = "0"
 thiserror = "1"
 rand = "0"
 triggered = "0"
 
+[patch.crates-io]
+lorawan-device = { git = "https://github.com/lora-rs/lora-rs.git", rev="a5e690a3f1f68c4e4c43efcd564467938c574ea3" }
+lora-modulation = { git = "https://github.com/lora-rs/lora-rs.git", rev="a5e690a3f1f68c4e4c43efcd564467938c574ea3" }
+
 [dependencies.tokio]
 version = "1"
 features = ["macros", "sync", "time", "rt-multi-thread", "signal"]
 
 [features]
-async-radio = ["rand_core"]
+multicast = [ "lorawan-device/multicast" ]
+async-radio = [ "rand_core/getrandom" ]

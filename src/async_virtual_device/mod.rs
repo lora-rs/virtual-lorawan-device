@@ -9,7 +9,6 @@ use lorawan_device::async_device::{
     radio::{PhyRxTx, RxConfig, Timer},
     Device, Downlink, JoinResponse, NetworkCredentials, SendResponse, Timings,
 };
-use lorawan_device::default_crypto::DefaultFactory;
 use lorawan_device::region::Configuration;
 use lorawan_device::{AppEui, AppKey, DevEui, JoinMode};
 pub use semtech_udp::client_runtime::{ClientTx, DownlinkRequest};
@@ -27,7 +26,7 @@ pub struct VirtualDevice {
     secs_between_transmits: u64,
     secs_between_join_transmits: u64,
     credentials: NetworkCredentials,
-    device: Device<VirtualRadio, DefaultFactory, VirtualTimer, rand_core::OsRng, 512, 4>,
+    device: Device<VirtualRadio, VirtualTimer, rand_core::OsRng, 512, 4>,
     state: State,
 }
 
@@ -62,6 +61,7 @@ impl VirtualDevice {
             rand_core::OsRng,
         );
         device.enable_class_c();
+        #[cfg(feature = "multicast")]
         device.set_multicast_ke_key(lorawan_device::async_device::McRootKey::from_str(
             "3371C1F28C755A5D328DFDD6E01A32ED",
         )?);
