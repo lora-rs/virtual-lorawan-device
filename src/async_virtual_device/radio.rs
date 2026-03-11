@@ -9,7 +9,6 @@ use lorawan_device::async_device::radio::{
 use lorawan_device::async_device::Timings;
 use lorawan_device::nb_device::radio;
 use semtech_udp::client_runtime::{ClientTx, DownlinkRequest};
-use std::mem::offset_of;
 use std::time::{Duration, Instant};
 use tokio::sync::mpsc;
 use tokio::time::sleep;

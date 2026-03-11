@@ -11,6 +11,7 @@ use std::{
 use structopt::StructOpt;
 use tokio::{
     signal,
+    sync::oneshot,
     time::{sleep, Duration},
 };
 
@@ -42,6 +43,9 @@ pub struct Opt {
     /// Limit number of devices to spawn
     #[structopt(short, long)]
     pub limit: Option<usize>,
+    /// Smoke test mode: all devices must join and receive an ACK within N seconds, then exit 0. Exits 1 on timeout.
+    #[structopt(long)]
+    pub smoke_test: Option<u64>,
 }
 
 const DEFAULT_PF: &str = "default";
@@ -84,6 +88,8 @@ async fn main() -> Result<()> {
         usize::MAX
     };
     let trigger_listener = setup_shutdown_listener()?;
+    let smoke_test = cli.smoke_test;
+    let mut smoke_test_receivers = Vec::new();
     let mut pf_map = setup_packet_forwarders(settings.packet_forwarder).await?;
     for (label, device) in settings.device.clone().into_iter().take(device_limit) {
         let packet_forwarder = if let Some(pf) = &device.packet_forwarder {
@@ -100,6 +106,14 @@ async fn main() -> Result<()> {
         if let Some((_udp_runtime, client_tx, _client_rx, senders)) =
             pf_map.get_mut(packet_forwarder)
         {
+            let smoke_test_tx = if smoke_test.is_some() {
+                let (tx, rx) = oneshot::channel();
+                smoke_test_receivers.push((label.clone(), rx));
+                Some(tx)
+            } else {
+                None
+            };
+
             let (packet_sender, virtual_device) = VirtualDevice::new(
                 label.clone(),
                 instant,
@@ -110,6 +124,7 @@ async fn main() -> Result<()> {
                 device.secs_between_transmits,
                 device.secs_between_join_transmits,
                 device.region,
+                smoke_test_tx,
             )
             .await?;
 
@@ -132,6 +147,41 @@ async fn main() -> Result<()> {
             senders,
             trigger_listener.clone(),
         ));
+    }
+
+    if let Some(timeout_secs) = smoke_test {
+        info!(
+            "Smoke test mode: {} devices must join and receive ACK within {} seconds",
+            smoke_test_receivers.len(),
+            timeout_secs
+        );
+        let all_done = async {
+            for (label, rx) in &mut smoke_test_receivers {
+                if rx.await.is_err() {
+                    error!("{} device task exited without completing smoke test", label);
+                    std::process::exit(1);
+                }
+            }
+        };
+        tokio::select! {
+            _ = all_done => {
+                info!("Smoke test passed: all devices joined and received ACK");
+                std::process::exit(0);
+            }
+            _ = sleep(Duration::from_secs(timeout_secs)) => {
+                error!("Smoke test failed: timeout after {} seconds", timeout_secs);
+                for (label, mut rx) in smoke_test_receivers {
+                    if rx.try_recv().is_err() {
+                        error!("  {} did not complete", label);
+                    }
+                }
+                std::process::exit(1);
+            }
+            _ = trigger_listener.clone() => {
+                error!("Smoke test interrupted");
+                std::process::exit(1);
+            }
+        }
     }
 
     metrics

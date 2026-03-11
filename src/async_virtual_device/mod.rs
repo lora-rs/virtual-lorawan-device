@@ -2,23 +2,23 @@ pub mod radio;
 
 use radio::*;
 
-use crate::{metrics, settings, Credentials, DownlinkSender, Result};
+use crate::{metrics, settings, Credentials, Result};
 
-use log::{debug, error, info, warn};
+use log::{error, info};
 use lorawan_device::async_device::{
-    radio::{PhyRxTx, RxConfig, Timer},
-    Device, Downlink, JoinResponse, NetworkCredentials, SendResponse, Timings,
+    Device, Downlink, JoinResponse, NetworkCredentials, SendResponse,
 };
 use lorawan_device::region::Configuration;
 use lorawan_device::{AppEui, AppKey, DevEui, JoinMode};
-pub use semtech_udp::client_runtime::{ClientTx, DownlinkRequest};
+use semtech_udp::client_runtime::ClientTx;
 use std::str::FromStr;
 use std::time::Instant;
 use tokio::{
-    sync::mpsc,
+    sync::{mpsc, oneshot},
     time::{sleep, Duration},
 };
 
+#[allow(dead_code)]
 pub struct VirtualDevice {
     label: String,
     metrics_sender: metrics::Sender,
@@ -28,6 +28,8 @@ pub struct VirtualDevice {
     credentials: NetworkCredentials,
     device: Device<VirtualRadio, VirtualTimer, rand_core::OsRng, 512, 4>,
     state: State,
+    smoke_test_tx: Option<oneshot::Sender<()>>,
+    smoke_test_done: bool,
 }
 
 enum State {
@@ -47,6 +49,7 @@ impl VirtualDevice {
         secs_between_transmits: u64,
         secs_between_join_transmits: u64,
         region: settings::Region,
+        smoke_test_tx: Option<oneshot::Sender<()>>,
     ) -> Result<(DS, Self)> {
         let (sender, receiver) = mpsc::channel(100);
         let mut device = Device::new(
@@ -80,6 +83,8 @@ impl VirtualDevice {
                 ),
                 device,
                 state: State::NotJoined,
+                smoke_test_tx,
+                smoke_test_done: false,
             },
         ))
     }
@@ -101,6 +106,10 @@ impl VirtualDevice {
                     Duration::from_secs(0)
                 }
             };
+
+            if self.smoke_test_done {
+                return Ok(());
+            }
 
             tokio::select!(
                 _ = sleep(duration) => {},
@@ -163,9 +172,15 @@ impl VirtualDevice {
         match send_response {
             SendResponse::SessionExpired => {}
             SendResponse::NoAck => {}
-            SendResponse::DownlinkReceived(fcnt) => {
+            SendResponse::DownlinkReceived(_fcnt) => {
                 while let Some(downlink) = self.device.take_downlink() {
                     self.handle_downlink(downlink, false);
+                }
+                if let Some(tx) = self.smoke_test_tx.take() {
+                    info!("{} smoke test complete", self.label);
+                    let _ = tx.send(());
+                    self.smoke_test_done = true;
+                    return Ok(Duration::from_secs(0));
                 }
             }
             SendResponse::RxComplete => {}

@@ -11,6 +11,8 @@ use std::time::Instant;
 use tokio::time::{sleep, Duration};
 use udp_radio::UdpRadio;
 
+use tokio::sync::oneshot;
+
 use crate::{metrics, settings, ClientTx, Credentials, DownlinkSender, Error, Result};
 
 pub(crate) use udp_radio::{mpsc, IntermediateEvent};
@@ -26,6 +28,7 @@ pub struct VirtualDevice {
     secs_between_transmits: u64,
     secs_between_join_transmits: u64,
     credentials: NetworkCredentials,
+    smoke_test_tx: Option<oneshot::Sender<()>>,
 }
 
 #[derive(Clone)]
@@ -54,6 +57,7 @@ impl VirtualDevice {
         secs_between_transmits: u64,
         secs_between_join_transmits: u64,
         region: settings::Region,
+        smoke_test_tx: Option<oneshot::Sender<()>>,
     ) -> Result<(PacketSender, VirtualDevice)> {
         let (radio, receiver, sender) = UdpRadio::new(time, client_tx).await;
         let device: Device<UdpRadio, rand::rngs::OsRng, 512> =
@@ -77,6 +81,7 @@ impl VirtualDevice {
                     DevEui::from_str(&credentials.dev_eui)?,
                     AppKey::from_str(&credentials.app_key)?,
                 ),
+                smoke_test_tx,
             },
         ))
     }
@@ -189,6 +194,11 @@ impl VirtualDevice {
                                     fcnt_down,
                                     time_remaining / 1000
                                 )
+                            }
+                            if let Some(tx) = self.smoke_test_tx.take() {
+                                info!("{:8} smoke test complete", self.label);
+                                let _ = tx.send(());
+                                return Ok(());
                             }
                         }
                         LorawanResponse::NoAck => {
