@@ -1,4 +1,4 @@
-[![Continuous Integration](https://github.com/helium/virtual-lorawan-device/actions/workflows/rust.yml/badge.svg)](https://github.com/helium/virtual-lorawan-device/actions/workflows/rust.yml)
+[![Continuous Integration](https://github.com/lora-rs/virtual-lorawan-device/actions/workflows/rust.yml/badge.svg)](https://github.com/lora-rs/virtual-lorawan-device/actions/workflows/rust.yml)
 
 # virtual-lorawan-device
 
