@@ -1,4 +1,3 @@
-use crate::*;
 use thiserror::Error;
 
 pub type Result<T = ()> = std::result::Result<T, Error>;
@@ -29,5 +28,5 @@ pub enum Error {
     TokioJoin(tokio::task::JoinError),
     #[cfg(feature = "async-radio")]
     #[error("async radio error")]
-    AsyncLorawanRadio(lorawan_device::async_device::Error<async_virtual_device::radio::Error>),
+    AsyncLorawanRadio(lorawan_device::async_device::Error<crate::async_virtual_device::radio::Error>),
 }

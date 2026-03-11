@@ -13,12 +13,14 @@ use std::convert::Infallible;
 use tokio::net::TcpListener;
 use tokio::sync::mpsc;
 
+#[allow(dead_code)]
 pub struct Sender {
     server: String,
     sender: mpsc::Sender<InternalMessage>,
 }
 
 impl Sender {
+    #[allow(dead_code)]
     pub async fn send(&mut self, message: Message) -> Result<()> {
         let server = self.server.clone();
         match message {
@@ -40,6 +42,7 @@ impl Sender {
 }
 
 #[derive(Debug)]
+#[allow(dead_code)]
 pub enum Message {
     JoinSuccess(i64),
     JoinFail,
@@ -54,6 +57,7 @@ pub struct Metrics {
 }
 
 #[derive(Debug)]
+#[allow(dead_code)]
 enum InternalMessage {
     JoinSuccess(String, i64),
     JoinFail(String),
