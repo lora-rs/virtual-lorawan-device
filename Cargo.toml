@@ -29,8 +29,8 @@ rand = "0"
 triggered = "0"
 
 [patch.crates-io]
-lorawan-device = { git = "https://github.com/lora-rs/lora-rs.git", rev="a5e690a3f1f68c4e4c43efcd564467938c574ea3" }
-lora-modulation = { git = "https://github.com/lora-rs/lora-rs.git", rev="a5e690a3f1f68c4e4c43efcd564467938c574ea3" }
+lorawan-device = { git = "https://github.com/lora-rs/lora-rs.git", rev="fa120edd6d6b0de530361b89c992955b49d7bce8" }
+lora-modulation = { git = "https://github.com/lora-rs/lora-rs.git", rev="fa120edd6d6b0de530361b89c992955b49d7bce8" }
 
 [dependencies.tokio]
 version = "1"
