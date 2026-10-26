@@ -54,6 +54,21 @@ app_eui = "35BEED137AC3344B"
 app_key = "275AD3615ACA47A381E6B79A832CC5AE"
 ```
 
+#### Persistence
+
+When built with `--features persistence`, each device restores its state from a
+file-backed `NonVolatileStore`. The state lives in `state/<device label>`
+relative to the working directory, with one file per persisted region (`identity`
+and `session`).
+
+A restored session allows the device to resume sending after a restart without
+joining again. Supplying a store also enables LoRaWAN 1.0.4 behavior: a monotonic
+`DevNonce`, `JoinNonce` replay protection, and a persisted uplink frame counter
+checkpoint.
+
+Delete `state/<device label>` to make a device join from scratch. Do not run
+multiple instances against the same state directory at the same time.
+
 ### A more complicated configuration
 
 More complicated configurations are possible. You could have multiple virtual packet forwarders:

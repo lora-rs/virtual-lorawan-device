@@ -1,3 +1,5 @@
+#[cfg(feature = "persistence")]
+mod nvm;
 pub mod radio;
 
 use radio::*;
@@ -19,6 +21,11 @@ use tokio::{
     time::{sleep, Duration},
 };
 
+#[cfg(feature = "persistence")]
+type DeviceStack = Device<VirtualRadio, VirtualTimer, rand_core::OsRng, 512, 4, nvm::FileNvm>;
+#[cfg(not(feature = "persistence"))]
+type DeviceStack = Device<VirtualRadio, VirtualTimer, rand_core::OsRng, 512, 4>;
+
 pub struct VirtualDevice {
     label: String,
     metrics_sender: metrics::Sender,
@@ -26,7 +33,7 @@ pub struct VirtualDevice {
     secs_between_transmits: u64,
     secs_between_join_transmits: u64,
     credentials: NetworkCredentials,
-    device: Device<VirtualRadio, VirtualTimer, rand_core::OsRng, 512, 4>,
+    device: DeviceStack,
     state: State,
 }
 
@@ -49,17 +56,48 @@ impl VirtualDevice {
         region: settings::Region,
     ) -> Result<(DS, Self)> {
         let (sender, receiver) = mpsc::channel(100);
-        let mut device = Device::new(
-            Configuration::new(region.into()),
-            VirtualRadio {
-                receiver,
-                client_tx,
-                time,
-                rx_config: None,
-            },
-            VirtualTimer(time),
-            rand_core::OsRng,
+        let radio = VirtualRadio {
+            receiver,
+            client_tx,
+            time,
+            rx_config: None,
+        };
+        let timer = VirtualTimer(time);
+
+        #[cfg(feature = "persistence")]
+        let (mut device, state) = {
+            let store = nvm::FileNvm::new(nvm::state_dir(&label))?;
+            info!("{}: NVM state directory {:?}", label, store.dir());
+            // A store enables LoRaWAN 1.0.4 persistence behavior.
+            let mut device = Device::restore(
+                Configuration::new(region.into()),
+                radio,
+                timer,
+                rand_core::OsRng,
+                store,
+            )
+            .await?;
+            // Resume without joining if a session was restored.
+            let state = if device.get_session().is_some() {
+                info!("{}: restored persisted session, skipping join", label);
+                State::Joined
+            } else {
+                State::NotJoined
+            };
+            (device, state)
+        };
+
+        #[cfg(not(feature = "persistence"))]
+        let (mut device, state) = (
+            Device::new(
+                Configuration::new(region.into()),
+                radio,
+                timer,
+                rand_core::OsRng,
+            ),
+            State::NotJoined,
         );
+
         device.enable_class_c();
         #[cfg(feature = "multicast")]
         device.set_multicast_ke_key(lorawan_device::async_device::McRootKey::from_str(
@@ -79,7 +117,7 @@ impl VirtualDevice {
                     AppKey::from_str(&credentials.app_key)?,
                 ),
                 device,
-                state: State::NotJoined,
+                state,
             },
         ))
     }
