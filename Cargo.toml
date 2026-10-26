@@ -39,3 +39,5 @@ features = ["macros", "sync", "time", "rt-multi-thread", "signal"]
 [features]
 multicast = [ "lorawan-device/multicast" ]
 async-radio = [ "rand_core/getrandom" ]
+# File-backed NonVolatileStore support (async device only).
+persistence = [ "async-radio" ]

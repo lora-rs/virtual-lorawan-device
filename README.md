@@ -54,6 +54,12 @@ app_eui = "35BEED137AC3344B"
 app_key = "275AD3615ACA47A381E6B79A832CC5AE"
 ```
 
+#### Persistence
+
+Build with `--features persistence` to store the identity (monotonic DevNonce
+and certification port state) under `state/<device label>`. The session is not
+persisted, so a restarted device joins again.
+
 ### A more complicated configuration
 
 More complicated configurations are possible. You could have multiple virtual packet forwarders:
