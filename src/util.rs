@@ -58,6 +58,7 @@ impl Default for Settings {
                     radio::Bandwidth::_125KHz,
                     radio::CodingRate::_4_5,
                 ),
+                max_payload_len: u8::MAX,
             },
         }
     }
