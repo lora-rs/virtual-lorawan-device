@@ -21,13 +21,19 @@ use tokio::{
     time::{sleep, Duration},
 };
 
-struct DeviceHandlerStub;
+struct ResetHandler {
+    reset_tx: mpsc::UnboundedSender<()>,
+}
 
-impl DeviceHandler for DeviceHandlerStub {}
+impl DeviceHandler for ResetHandler {
+    fn reboot(&mut self) {
+        let _ = self.reset_tx.send(());
+    }
+}
 
 #[cfg(feature = "persistence")]
 type DeviceStack =
-    Device<VirtualRadio, VirtualTimer, rand_core::OsRng, 512, 4, nvm::FileNvm, DeviceHandlerStub>;
+    Device<VirtualRadio, VirtualTimer, rand_core::OsRng, 512, 4, nvm::FileNvm, ResetHandler>;
 #[cfg(not(feature = "persistence"))]
 type DeviceStack = Device<
     VirtualRadio,
@@ -36,7 +42,7 @@ type DeviceStack = Device<
     512,
     4,
     lorawan_device::nvm::NoNvm,
-    DeviceHandlerStub,
+    ResetHandler,
 >;
 
 pub struct VirtualDevice {
@@ -48,6 +54,7 @@ pub struct VirtualDevice {
     credentials: NetworkCredentials,
     device: DeviceStack,
     state: State,
+    reset_rx: mpsc::UnboundedReceiver<()>,
 }
 
 enum State {
@@ -76,13 +83,16 @@ impl VirtualDevice {
             rx_config: None,
         };
         let timer = VirtualTimer(time);
+        let (reset_tx, reset_rx) = mpsc::unbounded_channel();
 
         #[cfg(feature = "persistence")]
         let (mut device, state) = {
             let store = nvm::FileNvm::new(nvm::state_dir(&label))?;
             info!("{}: NVM state directory {:?}", label, store.dir());
             let mut device = Device::restore_with_handler(
-                DeviceHandlerStub,
+                ResetHandler {
+                    reset_tx: reset_tx.clone(),
+                },
                 Configuration::new(region.into()),
                 radio,
                 timer,
@@ -103,7 +113,9 @@ impl VirtualDevice {
         #[cfg(not(feature = "persistence"))]
         let (mut device, state) = (
             Device::new_with_handler(
-                DeviceHandlerStub,
+                ResetHandler {
+                    reset_tx: reset_tx.clone(),
+                },
                 Configuration::new(region.into()),
                 radio,
                 timer,
@@ -134,6 +146,7 @@ impl VirtualDevice {
                 ),
                 device,
                 state,
+                reset_rx,
             },
         ))
     }
@@ -144,6 +157,12 @@ impl VirtualDevice {
         sleep(Duration::from_millis(random)).await;
 
         loop {
+            // Drain a reset handled during the previous operation.
+            if self.reset_rx.try_recv().is_ok() {
+                info!("{} reset requested, joining again", self.label);
+                self.state = State::NotJoined;
+            }
+
             // The MAC layer can be reset, dropping the session.
             if matches!(self.state, State::Joined) && self.device.get_session().is_none() {
                 self.state = State::NotJoined;
@@ -163,6 +182,10 @@ impl VirtualDevice {
 
             tokio::select!(
                 _ = sleep(duration) => {},
+                _ = self.reset_rx.recv() => {
+                    info!("{} reset requested, joining again", self.label);
+                    self.state = State::NotJoined;
+                }
                 result = self.device.rxc_listen() => {
                     match result {
                         Ok(response) => {
