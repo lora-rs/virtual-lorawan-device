@@ -54,6 +54,17 @@ app_eui = "35BEED137AC3344B"
 app_key = "275AD3615ACA47A381E6B79A832CC5AE"
 ```
 
+#### Persistence
+
+Build with `--features persistence` to store identity and session state under
+`state/<device label>`. The identity (monotonic `DevNonce`) survives restarts,
+but stored sessions are discarded on startup so the device always joins again.
+
+#### Logging
+
+Build with `--features defmt` and set `RUST_LOG=debug` to see the LoRaWAN
+stack's `defmt` logs through `env_logger`.
+
 ### A more complicated configuration
 
 More complicated configurations are possible. You could have multiple virtual packet forwarders:

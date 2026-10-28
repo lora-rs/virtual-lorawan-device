@@ -1,7 +1,10 @@
 use super::Result;
 use config::{Config, File};
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, path::Path};
+use std::{
+    collections::{HashMap, HashSet},
+    path::Path,
+};
 
 #[derive(Deserialize, Debug)]
 pub struct Settings {
@@ -28,7 +31,13 @@ impl Settings {
             ));
         }
         let config = builder.build()?;
-        Ok(config.try_deserialize()?)
+        let settings: Settings = config.try_deserialize()?;
+        settings.validate()?;
+        Ok(settings)
+    }
+
+    fn validate(&self) -> Result<()> {
+        validate_device_labels(self.device.keys().map(String::as_str))
     }
 
     pub fn get_servers(&self) -> Vec<&String> {
@@ -99,6 +108,29 @@ fn default_region() -> Region {
     Region::US915
 }
 
+/// Device labels are used as a directory name under `state/`.
+fn validate_device_label(label: &str) -> Result<()> {
+    let mut chars = label.chars();
+    let valid_start = matches!(chars.next(), Some(c) if c.is_ascii_lowercase() || c == '_');
+    let valid_rest = chars.all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_');
+
+    if !valid_start || !valid_rest || label.len() > 40 {
+        return Err(Error::InvalidDeviceLabel(label.to_string()));
+    }
+    Ok(())
+}
+
+fn validate_device_labels<'a>(labels: impl Iterator<Item = &'a str>) -> Result<()> {
+    let mut seen = HashSet::new();
+    for label in labels {
+        validate_device_label(label)?;
+        if !seen.insert(label) {
+            return Err(Error::DuplicateDeviceLabel(label.to_string()));
+        }
+    }
+    Ok(())
+}
+
 #[derive(Clone, Deserialize, Serialize, Debug)]
 pub struct Credentials {
     pub app_eui: String,
@@ -160,5 +192,57 @@ impl FromStr for Region {
             "EU868" => Ok(Region::EU868),
             _ => Err(Error::InvalidRegionString(input.to_string())),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn accepts_labels() {
+        let long = "reallylongname12345678901234567890123456";
+        assert_eq!(long.len(), 40);
+        for label in ["one", "device_1", "_device", "_", "a1_b2", long] {
+            assert!(validate_device_label(label).is_ok(), "{label:?}");
+        }
+    }
+
+    #[test]
+    fn rejects_invalid_characters() {
+        for label in [
+            "",
+            ".",
+            "..",
+            "a/b",
+            "../escape",
+            "/absolute",
+            "a\\b",
+            "a\nb",
+            "a\tb",
+            "a\0b",
+            "device-1",
+            "a.b",
+            "with space",
+            "ümlaut",
+            "Device1",
+            "1device",
+            "-device",
+            "_Device",
+        ] {
+            assert!(validate_device_label(label).is_err(), "{label:?}");
+        }
+    }
+
+    #[test]
+    fn enforces_length_limit() {
+        assert!(validate_device_label(&"x".repeat(40)).is_ok());
+        assert!(validate_device_label(&"x".repeat(41)).is_err());
+    }
+
+    #[test]
+    fn rejects_duplicates() {
+        assert!(validate_device_labels(["one", "two"].into_iter()).is_ok());
+        assert!(validate_device_labels(["one", "one"].into_iter()).is_err());
     }
 }

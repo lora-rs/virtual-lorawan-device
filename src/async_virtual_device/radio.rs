@@ -56,11 +56,12 @@ impl PhyRxTx for VirtualRadio {
         let tmst = self.time.elapsed().as_micros() as u32;
         let settings = Settings::from(config.rf);
         info!(
-            "Transmit @ {tmst} on {} Hz {:?}",
+            "Transmit @ {tmst} on {} Hz {:?}, power: {:?}",
             settings.get_freq(),
-            settings.get_datr()
+            settings.get_datr(),
+            config.pw,
         );
-        let packet = tx_request_to_rxpk(settings, &buf, tmst);
+        let packet = tx_request_to_rxpk(settings, &buf, tmst, config.pw);
         self.client_tx
             .send(packet)
             .await
