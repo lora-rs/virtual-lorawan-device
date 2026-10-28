@@ -12,7 +12,7 @@ use lorawan_device::async_device::{
     Device, Downlink, JoinResponse, NetworkCredentials, SendResponse, Timings,
 };
 use lorawan_device::region::Configuration;
-use lorawan_device::{AppEui, AppKey, DevEui, JoinMode};
+use lorawan_device::{AppEui, AppKey, DevEui, DeviceHandler, JoinMode};
 pub use semtech_udp::client_runtime::{ClientTx, DownlinkRequest};
 use std::str::FromStr;
 use std::time::Instant;
@@ -21,10 +21,23 @@ use tokio::{
     time::{sleep, Duration},
 };
 
+struct DeviceHandlerStub;
+
+impl DeviceHandler for DeviceHandlerStub {}
+
 #[cfg(feature = "persistence")]
-type DeviceStack = Device<VirtualRadio, VirtualTimer, rand_core::OsRng, 512, 4, nvm::FileNvm>;
+type DeviceStack =
+    Device<VirtualRadio, VirtualTimer, rand_core::OsRng, 512, 4, nvm::FileNvm, DeviceHandlerStub>;
 #[cfg(not(feature = "persistence"))]
-type DeviceStack = Device<VirtualRadio, VirtualTimer, rand_core::OsRng, 512, 4>;
+type DeviceStack = Device<
+    VirtualRadio,
+    VirtualTimer,
+    rand_core::OsRng,
+    512,
+    4,
+    lorawan_device::nvm::NoNvm,
+    DeviceHandlerStub,
+>;
 
 pub struct VirtualDevice {
     label: String,
@@ -68,7 +81,8 @@ impl VirtualDevice {
         let (mut device, state) = {
             let store = nvm::FileNvm::new(nvm::state_dir(&label))?;
             info!("{}: NVM state directory {:?}", label, store.dir());
-            let mut device = Device::restore(
+            let mut device = Device::restore_with_handler(
+                DeviceHandlerStub,
                 Configuration::new(region.into()),
                 radio,
                 timer,
@@ -88,7 +102,8 @@ impl VirtualDevice {
 
         #[cfg(not(feature = "persistence"))]
         let (mut device, state) = (
-            Device::new(
+            Device::new_with_handler(
+                DeviceHandlerStub,
                 Configuration::new(region.into()),
                 radio,
                 timer,
