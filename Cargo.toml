@@ -19,7 +19,7 @@ http-body-util = "0"
 hyper = { version = "1", features = ["full"] }
 hyper-util = {  version = "0", features = ["tokio"] }
 log = "0"
-lorawan-device = { version = ">=0.12.2", features = ["serde"] }
+lorawan-device = { version = ">=0.12.2", features = ["serde", "certification"] }
 prometheus = "0"
 rand_core = { version = "0.6", default-features = false, optional = true }
 semtech-udp = { version="0.12", features = ["client"] }

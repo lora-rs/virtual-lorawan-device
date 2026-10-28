@@ -21,13 +21,19 @@ use tokio::{
     time::{sleep, Duration},
 };
 
-struct DeviceHandlerStub;
+struct ResetHandler {
+    reset_tx: mpsc::UnboundedSender<()>,
+}
 
-impl DeviceHandler for DeviceHandlerStub {}
+impl DeviceHandler for ResetHandler {
+    fn reboot(&mut self) {
+        let _ = self.reset_tx.send(());
+    }
+}
 
 #[cfg(feature = "persistence")]
 type DeviceStack =
-    Device<VirtualRadio, VirtualTimer, rand_core::OsRng, 512, 4, nvm::FileNvm, DeviceHandlerStub>;
+    Device<VirtualRadio, VirtualTimer, rand_core::OsRng, 512, 4, nvm::FileNvm, ResetHandler>;
 #[cfg(not(feature = "persistence"))]
 type DeviceStack = Device<
     VirtualRadio,
@@ -36,7 +42,7 @@ type DeviceStack = Device<
     512,
     4,
     lorawan_device::nvm::NoNvm,
-    DeviceHandlerStub,
+    ResetHandler,
 >;
 
 pub struct VirtualDevice {
@@ -48,6 +54,13 @@ pub struct VirtualDevice {
     credentials: NetworkCredentials,
     device: DeviceStack,
     state: State,
+    /// Kept outside the device so a reboot can build a new radio on the same
+    /// downlink channel and a new stack on the same store.
+    time: Instant,
+    client_tx: ClientTx,
+    region: settings::Region,
+    reset_tx: mpsc::UnboundedSender<()>,
+    reset_rx: mpsc::UnboundedReceiver<()>,
 }
 
 enum State {
@@ -69,49 +82,18 @@ impl VirtualDevice {
         region: settings::Region,
     ) -> Result<(DS, Self)> {
         let (sender, receiver) = mpsc::channel(100);
-        let radio = VirtualRadio {
-            receiver,
-            client_tx,
+        let (reset_tx, reset_rx) = mpsc::unbounded_channel();
+
+        let device = Self::make_device(
+            &label,
             time,
-            rx_config: None,
-        };
-        let timer = VirtualTimer(time);
+            client_tx.clone(),
+            receiver,
+            reset_tx.clone(),
+            region.clone(),
+        )
+        .await?;
 
-        #[cfg(feature = "persistence")]
-        let (mut device, state) = {
-            let store = nvm::FileNvm::new(nvm::state_dir(&label))?;
-            info!("{}: NVM state directory {:?}", label, store.dir());
-            let device = Device::restore_with_handler(
-                DeviceHandlerStub,
-                Configuration::new(region.into()),
-                radio,
-                timer,
-                rand_core::OsRng,
-                store,
-            )
-            .await?;
-            (device, State::NotJoined)
-        };
-
-        #[cfg(not(feature = "persistence"))]
-        let (mut device, state) = (
-            Device::new_with_handler(
-                DeviceHandlerStub,
-                Configuration::new(region.into()),
-                radio,
-                timer,
-                rand_core::OsRng,
-            ),
-            State::NotJoined,
-        );
-
-        // TODO: Make Class C optional
-        device.enable_class_c();
-
-        #[cfg(feature = "multicast")]
-        device.set_multicast_ke_key(lorawan_device::async_device::McRootKey::from_str(
-            "3371C1F28C755A5D328DFDD6E01A32ED",
-        )?);
         Ok((
             DS(sender),
             Self {
@@ -126,9 +108,96 @@ impl VirtualDevice {
                     AppKey::from_str(&credentials.app_key)?,
                 ),
                 device,
-                state,
+                state: State::NotJoined,
+                time,
+                client_tx,
+                region,
+                reset_tx,
+                reset_rx,
             },
         ))
+    }
+
+    /// Build a device stack. With persistence this restores the identity
+    /// (monotonic DevNonce, JoinNonce replay protection and the certification
+    /// port state) from the store; the session is never persisted, so the
+    /// result is unjoined either way.
+    async fn make_device(
+        label: &str,
+        time: Instant,
+        client_tx: ClientTx,
+        receiver: mpsc::Receiver<Box<DownlinkRequest>>,
+        reset_tx: mpsc::UnboundedSender<()>,
+        region: settings::Region,
+    ) -> Result<DeviceStack> {
+        let _ = label;
+        let radio = VirtualRadio {
+            receiver,
+            client_tx,
+            time,
+            rx_config: None,
+        };
+        let timer = VirtualTimer(time);
+
+        #[cfg(feature = "persistence")]
+        let mut device = {
+            let store = nvm::FileNvm::new(nvm::state_dir(label))?;
+            info!("{}: NVM state directory {:?}", label, store.dir());
+            Device::restore_with_handler(
+                ResetHandler { reset_tx },
+                Configuration::new(region.into()),
+                radio,
+                timer,
+                rand_core::OsRng,
+                store,
+            )
+            .await?
+        };
+
+        #[cfg(not(feature = "persistence"))]
+        let mut device = Device::new_with_handler(
+            ResetHandler { reset_tx },
+            Configuration::new(region.into()),
+            radio,
+            timer,
+            rand_core::OsRng,
+        );
+
+        // TODO: Make Class C optional
+        device.enable_class_c();
+
+        #[cfg(feature = "multicast")]
+        device.set_multicast_ke_key(lorawan_device::async_device::McRootKey::from_str(
+            "3371C1F28C755A5D328DFDD6E01A32ED",
+        )?);
+
+        Ok(device)
+    }
+
+    /// Simulate the MCU reboot requested by the stack: rebuild the device from
+    /// its store instead of reusing the reset one. The stack dropped the
+    /// in-memory identity on the reboot event, so continuing with it would draw
+    /// random DevNonces and violate the LoRaWAN 1.0.4 monotonic DevNonce rule.
+    async fn reboot(&mut self) -> Result {
+        info!("{} reboot requested, reloading persisted state", self.label);
+
+        // Keep the downlink channel paired with the packet forwarder's sender:
+        // take the receiver back out of the old radio before dropping it.
+        let (dummy_tx, dummy_rx) = mpsc::channel(1);
+        let receiver = std::mem::replace(&mut self.device.get_mut_radio().receiver, dummy_rx);
+        drop(dummy_tx);
+
+        self.device = Self::make_device(
+            &self.label,
+            self.time,
+            self.client_tx.clone(),
+            receiver,
+            self.reset_tx.clone(),
+            self.region.clone(),
+        )
+        .await?;
+        self.state = State::NotJoined;
+        Ok(())
     }
 
     pub async fn run(mut self) -> Result {
@@ -137,6 +206,11 @@ impl VirtualDevice {
         sleep(Duration::from_millis(random)).await;
 
         loop {
+            // Drain a reset handled during the previous operation.
+            if self.reset_rx.try_recv().is_ok() {
+                self.reboot().await?;
+            }
+
             // The MAC layer can be reset, dropping the session.
             if matches!(self.state, State::Joined) && self.device.get_session().is_none() {
                 self.state = State::NotJoined;
@@ -154,8 +228,10 @@ impl VirtualDevice {
                 }
             };
 
+            let mut reboot = false;
             tokio::select!(
                 _ = sleep(duration) => {},
+                _ = self.reset_rx.recv() => reboot = true,
                 result = self.device.rxc_listen() => {
                     match result {
                         Ok(response) => {
@@ -169,7 +245,11 @@ impl VirtualDevice {
                         self.handle_downlink(downlink, true);
                     }
                 }
-            )
+            );
+
+            if reboot {
+                self.reboot().await?;
+            }
         }
     }
 
