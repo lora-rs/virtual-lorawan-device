@@ -59,6 +59,11 @@ app_key = "275AD3615ACA47A381E6B79A832CC5AE"
 Build with `--features persistence` to store identity and session state under
 `state/<device label>`.
 
+#### Logging
+
+Build with `--features defmt` and set `RUST_LOG=debug` to see the LoRaWAN
+stack's `defmt` logs through `env_logger`.
+
 ### A more complicated configuration
 
 More complicated configurations are possible. You could have multiple virtual packet forwarders:
