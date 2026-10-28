@@ -73,6 +73,10 @@ async fn main() -> Result<()> {
         log_builder.init();
     }
 
+    // Bridge lorawan-device's defmt logs into the normal `log`/env_logger pipeline.
+    #[cfg(feature = "defmt")]
+    defmt2log::init_from_current_exe();
+
     let cli = Opt::from_args();
     let instant = Instant::now();
     let settings = settings::Settings::new(&cli.settings)?;

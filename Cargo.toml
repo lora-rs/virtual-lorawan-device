@@ -10,6 +10,7 @@ anyhow = "1"
 bytes = "1"
 chrono = "0"
 config = { version="0.14", default-features = false, features = ["toml"] }
+defmt2log = { version = "0.2", optional = true }
 env_logger = "0"
 futures-util = "0"
 heapless = "^0.8"
@@ -41,3 +42,7 @@ multicast = [ "lorawan-device/multicast" ]
 async-radio = [ "rand_core/getrandom" ]
 # File-backed NonVolatileStore support (async device only).
 persistence = [ "async-radio" ]
+# defmt filters callsites at compile time: anything more verbose than DEFMT_LOG
+# is removed. Build with the highest verbosity you may need, then filter at
+# runtime with RUST_LOG.
+defmt = [ "dep:defmt2log", "lorawan-device/defmt-03" ]

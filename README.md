@@ -60,6 +60,11 @@ Build with `--features persistence` to store the identity (monotonic DevNonce
 and certification port state) under `state/<device label>`. The session is not
 persisted, so a restarted device joins again.
 
+#### Logging
+
+Build with `--features defmt` and set `RUST_LOG=debug` to see the LoRaWAN
+stack's `defmt` logs through `env_logger`.
+
 ### A more complicated configuration
 
 More complicated configurations are possible. You could have multiple virtual packet forwarders:
