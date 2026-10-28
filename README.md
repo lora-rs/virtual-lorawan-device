@@ -57,7 +57,8 @@ app_key = "275AD3615ACA47A381E6B79A832CC5AE"
 #### Persistence
 
 Build with `--features persistence` to store identity and session state under
-`state/<device label>`.
+`state/<device label>`. The identity (monotonic `DevNonce`) survives restarts,
+but stored sessions are discarded on startup so the device always joins again.
 
 #### Logging
 

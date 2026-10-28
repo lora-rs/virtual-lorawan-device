@@ -100,14 +100,15 @@ impl VirtualDevice {
                 store,
             )
             .await?;
-            // Resume without joining if a session was restored.
-            let state = if device.get_session().is_some() {
-                info!("{}: restored persisted session, skipping join", label);
-                State::Joined
-            } else {
-                State::NotJoined
-            };
-            (device, state)
+            // Keep the persisted identity (monotonic DevNonce and JoinNonce
+            // replay protection), but always start unjoined. As a test device,
+            // a fresh process must perform OTAA again instead of silently
+            // resuming a session from a previous run.
+            if device.get_session().is_some() {
+                device.reset_mac();
+                info!("{}: discarded persisted session, joining", label);
+            }
+            (device, State::NotJoined)
         };
 
         #[cfg(not(feature = "persistence"))]
