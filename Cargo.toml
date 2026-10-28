@@ -30,8 +30,8 @@ rand = "0"
 triggered = "0"
 
 [patch.crates-io]
-lorawan-device = { git = "https://github.com/lthiery/lora-rs.git", branch="design/persistence" }
-lora-modulation = { git = "https://github.com/lthiery/lora-rs.git", branch="design/persistence" }
+lorawan-device = { git = "https://github.com/lora-rs/lora-rs.git", branch="design/persistence-certification" }
+lora-modulation = { git = "https://github.com/lora-rs/lora-rs.git", branch="design/persistence-certification" }
 
 [dependencies.tokio]
 version = "1"
