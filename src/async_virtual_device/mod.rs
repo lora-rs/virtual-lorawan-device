@@ -144,6 +144,11 @@ impl VirtualDevice {
         sleep(Duration::from_millis(random)).await;
 
         loop {
+            // The MAC layer can be reset, dropping the session.
+            if matches!(self.state, State::Joined) && self.device.get_session().is_none() {
+                self.state = State::NotJoined;
+            }
+
             let result = match self.state {
                 State::NotJoined => self.do_join().await,
                 State::Joined => self.do_send().await,
