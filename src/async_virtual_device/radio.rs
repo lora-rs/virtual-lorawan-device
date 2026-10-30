@@ -164,7 +164,7 @@ impl Timer for VirtualTimer {
     }
 
     async fn at(&mut self, millis: u64) {
-        let delay = millis - self.0.elapsed().as_millis() as u64;
+        let delay = millis.saturating_sub(self.0.elapsed().as_millis() as u64);
         if delay > 0 {
             sleep(Duration::from_millis(delay)).await;
         }
