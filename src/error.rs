@@ -21,6 +21,12 @@ pub enum Error {
     SemtechUdpClientRuntime(#[from] semtech_udp::client_runtime::Error),
     #[error("invalid region string")]
     InvalidRegionString(String),
+    #[error(
+        "invalid device label {0:?}: labels must match [a-z_][a-z0-9_]* and be at most 40 characters"
+    )]
+    InvalidDeviceLabel(String),
+    #[error("duplicate device label {0:?}: labels must be unique")]
+    DuplicateDeviceLabel(String),
     #[error("error sending downlink to upd_radio instance")]
     SendingDownlinkToUdpRadio,
     #[error("receive channel from semtech_udp::client_runtime unexpectedly closed")]

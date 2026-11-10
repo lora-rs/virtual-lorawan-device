@@ -1,4 +1,5 @@
 /target
+state/
 /.idea
 *.json
 settings/settings.toml
