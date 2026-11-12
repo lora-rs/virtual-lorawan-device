@@ -220,13 +220,18 @@ impl VirtualDevice {
                 State::NotJoined => self.do_join().await,
                 State::Joined => self.do_send().await,
             };
-            let duration = match result {
+            let mut duration = match result {
                 Ok(d) => d,
                 Err(e) => {
                     error!("{} error: {:?}", self.label, e);
                     Duration::from_secs(0)
                 }
             };
+
+            // The certification protocol can override the uplink periodicity.
+            if let Some(seconds) = self.device.get_override_periodicity() {
+                duration = Duration::from_secs(seconds.into());
+            }
 
             let mut reboot = false;
             tokio::select!(
