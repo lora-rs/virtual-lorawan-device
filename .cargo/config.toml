@@ -1,0 +1,5 @@
+# defmt filtering is compile-time: callsites more verbose than this level are
+# removed entirely. Keep the highest level here and filter at runtime with
+# RUST_LOG. An explicit DEFMT_LOG in the environment still takes precedence.
+[env]
+DEFMT_LOG = { value = "trace", force = false }

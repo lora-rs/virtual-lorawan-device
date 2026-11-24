@@ -111,7 +111,7 @@ impl radio::PhyRxTx for UdpRadio {
                     settings.get_freq(),
                     settings.get_datr()
                 );
-                let packet = tx_request_to_rxpk(settings, &buffer, tmst);
+                let packet = tx_request_to_rxpk(settings, &buffer, tmst, tx_config.pw);
                 let sender = self.client_tx.clone();
                 tokio::spawn(async move {
                     if let Err(e) = sender.send(packet).await {

@@ -56,11 +56,12 @@ impl PhyRxTx for VirtualRadio {
         let tmst = self.time.elapsed().as_micros() as u32;
         let settings = Settings::from(config.rf);
         info!(
-            "Transmit @ {tmst} on {} Hz {:?}",
+            "Transmit @ {tmst} on {} Hz {:?}, power: {:?}",
             settings.get_freq(),
-            settings.get_datr()
+            settings.get_datr(),
+            config.pw,
         );
-        let packet = tx_request_to_rxpk(settings, &buf, tmst);
+        let packet = tx_request_to_rxpk(settings, &buf, tmst, config.pw);
         self.client_tx
             .send(packet)
             .await
@@ -163,7 +164,7 @@ impl Timer for VirtualTimer {
     }
 
     async fn at(&mut self, millis: u64) {
-        let delay = millis - self.0.elapsed().as_millis() as u64;
+        let delay = millis.saturating_sub(self.0.elapsed().as_millis() as u64);
         if delay > 0 {
             sleep(Duration::from_millis(delay)).await;
         }

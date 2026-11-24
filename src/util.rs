@@ -1,4 +1,5 @@
 use lorawan_device::nb_device::radio;
+use rand::Rng;
 use semtech_udp::push_data::RxPkV1;
 use semtech_udp::{push_data, CodingRate, DataRate};
 
@@ -6,8 +7,11 @@ pub(crate) fn tx_request_to_rxpk(
     settings: Settings,
     buffer: &[u8],
     tmst: u32,
+    tx_power: i8,
 ) -> push_data::Packet {
     use push_data::{Packet, RxPk, CRC};
+    let jitter = rand::thread_rng().gen_range(-2..=2);
+    let rssi = tx_power + jitter;
     let rxpk = RxPkV1 {
         chan: 0,
         data: Vec::from(buffer),
@@ -18,7 +22,7 @@ pub(crate) fn tx_request_to_rxpk(
         lsnr: 5.5,
         modu: semtech_udp::Modulation::LORA,
         rfch: 0,
-        rssi: -112,
+        rssi: rssi.into(),
         rssis: None,
         stat: CRC::OK,
         tmst,
@@ -58,6 +62,7 @@ impl Default for Settings {
                     radio::Bandwidth::_125KHz,
                     radio::CodingRate::_4_5,
                 ),
+                max_payload_len: u8::MAX,
             },
         }
     }
